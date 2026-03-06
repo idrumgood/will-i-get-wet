@@ -2,7 +2,7 @@ import { useState } from 'react';
 import SearchForm from './components/SearchForm';
 import MapDisplay from './components/MapDisplay';
 import { geocodeCity } from './services/geocoding';
-import { getBicycleRoute } from './services/routing';
+import { getRoute } from './services/routing';
 import { calculateWeatherIntervals } from './services/intervals';
 import { getIntervalWeather, getWeatherDescription } from './services/weather';
 import './App.css';
@@ -12,12 +12,12 @@ function App() {
   const [error, setError] = useState(null);
   const [mapCenter, setMapCenter] = useState(null);
   const [mapZoom, setMapZoom] = useState(null);
-  const [routeInfo, setRouteInfo] = useState({ start: null, dest: null, time: null });
+  const [routeInfo, setRouteInfo] = useState({ start: null, dest: null, time: null, mode: 'bicycle' });
   const [routeGeometry, setRouteGeometry] = useState(null);
   const [weatherPoints, setWeatherPoints] = useState([]);
   const [routeStats, setRouteStats] = useState(null);
 
-  const handleSearch = async ({ start, destination, departureTime }) => {
+  const handleSearch = async ({ start, destination, departureTime, transportMode }) => {
     setIsLoading(true);
     setError(null);
 
@@ -34,15 +34,16 @@ function App() {
       console.log('Start Coordinates:', startCoords);
       console.log('Dest Coordinates:', destCoords);
       console.log('Departure Time:', departureTime);
+      console.log('Transport Mode:', transportMode);
       
-      setRouteInfo({ start: startCoords, dest: destCoords, time: departureTime });
+      setRouteInfo({ start: startCoords, dest: destCoords, time: departureTime, mode: transportMode });
       
       // Phase 3: Fetch Route Data
-      console.log("Fetching bicycle route...");
-      const routeData = await getBicycleRoute(startCoords, destCoords);
+      console.log(`Fetching ${transportMode} route...`);
+      const routeData = await getRoute(startCoords, destCoords, transportMode);
       
       if (!routeData) {
-        throw new Error("Could not find a valid bike route.");
+        throw new Error(`Could not find a valid ${transportMode} route.`);
       }
 
       setRouteGeometry(routeData.geometry.coordinates);
@@ -109,7 +110,9 @@ function App() {
           </div>
           <div style={{ width: '1px', backgroundColor: 'var(--panel-border)', height: '100%' }}></div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 'bold' }}>Est. Biking Time</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 'bold' }}>
+              Est. {routeInfo.mode === 'bicycle' ? 'Biking' : routeInfo.mode === 'driving' ? 'Driving' : 'Walking'} Time
+            </span>
             <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
               {routeStats.durationMins > 60 
                 ? `${Math.floor(routeStats.durationMins / 60)}h ${routeStats.durationMins % 60}m` 

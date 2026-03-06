@@ -1,8 +1,9 @@
 /**
- * Fetches a bicycle route between two coordinates using the OSRM public API.
+ * Fetches a route between two coordinates using the OSRM public API.
  * 
  * @param {{lat: number, lon: number}} start 
  * @param {{lat: number, lon: number}} end 
+ * @param {string} profile The OSRM profile to use (driving, bicycle, foot)
  * @returns {Promise<{
  *   geometry: { coordinates: [number, number][] }, 
  *   distance: number, 
@@ -10,7 +11,7 @@
  *   legs: any[]
  * } | null>}
  */
-export async function getBicycleRoute(start, end) {
+export async function getRoute(start, end, profile = 'bicycle') {
   if (!start || !end) return null;
 
   try {
@@ -18,8 +19,8 @@ export async function getBicycleRoute(start, end) {
     const startStr = `${start.lon},${start.lat}`;
     const endStr = `${end.lon},${end.lat}`;
     
-    // Using the bicycle profile, requesting full geometry in GeoJSON format
-    const url = `https://router.project-osrm.org/route/v1/bicycle/${startStr};${endStr}?overview=full&geometries=geojson`;
+    // Using the specified profile, requesting full geometry in GeoJSON format
+    const url = `https://router.project-osrm.org/route/v1/${profile}/${startStr};${endStr}?overview=full&geometries=geojson`;
 
     const response = await fetch(url);
 
