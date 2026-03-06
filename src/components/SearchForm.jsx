@@ -3,6 +3,12 @@ import { useState } from 'react';
 export default function SearchForm({ onSearch, isLoading }) {
   const [start, setStart] = useState('');
   const [destination, setDestination] = useState('');
+  const [transportMode, setTransportMode] = useState('bicycle');
+  
+  // Avoidance options
+  const [avoidTolls, setAvoidTolls] = useState(false);
+  const [avoidFerries, setAvoidFerries] = useState(false);
+  const [avoidHighways, setAvoidHighways] = useState(false);
   
   // Default departure time is "now"
   const now = new Date();
@@ -14,17 +20,23 @@ export default function SearchForm({ onSearch, isLoading }) {
     e.preventDefault();
     if (!start.trim() || !destination.trim()) return;
     
-    onSearch({ start, destination, departureTime });
+    onSearch({ 
+      start, 
+      destination, 
+      departureTime, 
+      transportMode,
+      options: {
+        avoidTolls,
+        avoidFerries,
+        avoidHighways: transportMode === 'driving' ? avoidHighways : false
+      }
+    });
   };
 
   return (
     <div className="glass-panel" style={{
-      position: 'absolute',
-      top: '20px',
-      left: '20px',
       width: '350px',
       padding: '24px',
-      zIndex: 1000,
       display: 'flex',
       flexDirection: 'column',
       gap: '20px'
@@ -75,6 +87,62 @@ export default function SearchForm({ onSearch, isLoading }) {
             }}
             required
           />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '0.875rem', fontWeight: 600 }}>Transport Mode</label>
+          <select
+            value={transportMode}
+            onChange={(e) => setTransportMode(e.target.value)}
+            style={{ 
+              padding: '10px 12px', 
+              borderRadius: '8px', 
+              border: '1px solid var(--panel-border)',
+              backgroundColor: 'rgba(255,255,255,0.7)',
+              outline: 'none',
+              fontFamily: 'inherit',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="driving">🚗 Car</option>
+            <option value="bicycle">🚴 Bicycle</option>
+            <option value="foot">🚶 Walking</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '0.875rem', fontWeight: 600 }}>Options</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', fontSize: '0.875rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <input 
+                type="checkbox" 
+                checked={avoidTolls} 
+                onChange={(e) => setAvoidTolls(e.target.checked)} 
+                style={{ marginRight: '6px' }}
+              />
+              Avoid Tolls
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <input 
+                type="checkbox" 
+                checked={avoidFerries} 
+                onChange={(e) => setAvoidFerries(e.target.checked)} 
+                style={{ marginRight: '6px' }}
+              />
+              Avoid Ferries
+            </label>
+            {transportMode === 'driving' && (
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <input 
+                  type="checkbox" 
+                  checked={avoidHighways} 
+                  onChange={(e) => setAvoidHighways(e.target.checked)} 
+                  style={{ marginRight: '6px' }}
+                />
+                Avoid Highways
+              </label>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
