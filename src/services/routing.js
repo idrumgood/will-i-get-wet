@@ -4,6 +4,7 @@
  * @param {{lat: number, lon: number}} start 
  * @param {{lat: number, lon: number}} end 
  * @param {string} profile The transport profile to use (driving, bicycle, foot)
+ * @param {object} options Optional routing preferences (avoidTolls, avoidFerries, avoidHighways)
  * @returns {Promise<{
  *   geometry: { coordinates: [number, number][] }, 
  *   distance: number,  // in meters
@@ -11,7 +12,7 @@
  *   legs: any[]
  * } | null>}
  */
-export async function getRoute(start, end, profile = 'bicycle') {
+export async function getRoute(start, end, profile = 'bicycle', options = {}) {
   if (!start || !end) return null;
 
   try {
@@ -32,6 +33,18 @@ export async function getRoute(start, end, profile = 'bicycle') {
       costing: costingModel,
       directions_options: { units: 'miles' }
     };
+
+    // Apply rigorous avoidance penalties if requested by the user
+    // Note: Valhalla uses a sliding scale 0 (avoid) to 1 (favor)
+    if (Object.keys(options).length > 0) {
+      payload.costing_options = {
+        [costingModel]: {}
+      };
+      
+      if (options.avoidTolls) payload.costing_options[costingModel].use_tolls = 0;
+      if (options.avoidFerries) payload.costing_options[costingModel].use_ferry = 0;
+      if (options.avoidHighways && costingModel === 'auto') payload.costing_options[costingModel].use_highways = 0;
+    }
 
     const response = await fetch(url, {
       method: "POST",

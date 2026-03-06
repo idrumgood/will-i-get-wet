@@ -17,7 +17,7 @@ function App() {
   const [weatherPoints, setWeatherPoints] = useState([]);
   const [routeStats, setRouteStats] = useState(null);
 
-  const handleSearch = async ({ start, destination, departureTime, transportMode }) => {
+  const handleSearch = async ({ start, destination, departureTime, transportMode, options }) => {
     setIsLoading(true);
     setError(null);
 
@@ -35,12 +35,13 @@ function App() {
       console.log('Dest Coordinates:', destCoords);
       console.log('Departure Time:', departureTime);
       console.log('Transport Mode:', transportMode);
+      console.log('Options:', options);
       
       setRouteInfo({ start: startCoords, dest: destCoords, time: departureTime, mode: transportMode });
       
       // Phase 3: Fetch Route Data
       console.log(`Fetching ${transportMode} route...`);
-      const routeData = await getRoute(startCoords, destCoords, transportMode);
+      const routeData = await getRoute(startCoords, destCoords, transportMode, options);
       
       if (!routeData) {
         throw new Error(`Could not find a valid ${transportMode} route.`);
