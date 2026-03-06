@@ -20,12 +20,8 @@ export default function SearchForm({ onSearch, isLoading }) {
 
   return (
     <div className="glass-panel" style={{
-      position: 'absolute',
-      top: '20px',
-      left: '20px',
       width: '350px',
       padding: '24px',
-      zIndex: 1000,
       display: 'flex',
       flexDirection: 'column',
       gap: '20px'

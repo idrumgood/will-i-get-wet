@@ -90,17 +90,23 @@ function App() {
 
   return (
     <div className="app-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <SearchForm onSearch={handleSearch} isLoading={isLoading} />
-      
-      {routeStats && !isLoading && (
-        <div className="glass-panel" style={{
-          position: 'absolute',
-          top: '350px', // Below the search form
-          left: '20px',
-          width: '350px',
-          padding: '16px',
-          zIndex: 1000,
-          display: 'flex',
+      {/* Left Sidebar Layout */}
+      <div style={{
+        position: 'absolute',
+        top: '20px',
+        left: '20px',
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px'
+      }}>
+        <SearchForm onSearch={handleSearch} isLoading={isLoading} />
+        
+        {routeStats && !isLoading && (
+          <div className="glass-panel" style={{
+            width: '350px',
+            padding: '16px',
+            display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
@@ -118,9 +124,10 @@ function App() {
                 ? `${Math.floor(routeStats.durationMins / 60)}h ${routeStats.durationMins % 60}m` 
                 : `${routeStats.durationMins}m`}
             </span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {error && (
         <div className="glass-panel" style={{
