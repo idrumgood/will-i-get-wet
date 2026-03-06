@@ -2,6 +2,9 @@ import { useState } from 'react';
 import SearchForm from './components/SearchForm';
 import MapDisplay from './components/MapDisplay';
 import { geocodeCity } from './services/geocoding';
+import { getBicycleRoute } from './services/routing';
+import { calculateWeatherIntervals } from './services/intervals';
+import { getIntervalWeather, getWeatherDescription } from './services/weather';
 import './App.css';
 
 function App() {
@@ -10,6 +13,8 @@ function App() {
   const [mapCenter, setMapCenter] = useState(null);
   const [mapZoom, setMapZoom] = useState(null);
   const [routeInfo, setRouteInfo] = useState({ start: null, dest: null, time: null });
+  const [routeGeometry, setRouteGeometry] = useState(null);
+  const [weatherPoints, setWeatherPoints] = useState([]);
 
   const handleSearch = async ({ start, destination, departureTime }) => {
     setIsLoading(true);
@@ -31,7 +36,41 @@ function App() {
       
       setRouteInfo({ start: startCoords, dest: destCoords, time: departureTime });
       
-      // Update map bounds to look at the new start location temporarily until Phase 3 routes it
+      // Phase 3: Fetch Route Data
+      console.log("Fetching bicycle route...");
+      const routeData = await getBicycleRoute(startCoords, destCoords);
+      
+      if (!routeData) {
+        throw new Error("Could not find a valid bike route.");
+      }
+
+      setRouteGeometry(routeData.geometry.coordinates);
+
+      // Phase 3: Calculate Intervals & weather
+      console.log("Calculating intervals and fetching weather...");
+      // Parse the standard HTML datetime-local picker string into a Date object
+      const depDate = new Date(departureTime);
+      
+      const intervalPoints = calculateWeatherIntervals(routeData.geometry.coordinates, routeData.duration, depDate, 30); // Every 30 mins
+      
+      // Fetch weather concurrently for all points
+      const weatherPromises = intervalPoints.map(async (pt) => {
+        const weather = await getIntervalWeather(pt.lat, pt.lon, pt.arrivalTime);
+        if (!weather) return null;
+        
+        const details = getWeatherDescription(weather.weatherCode);
+        return {
+          ...pt,
+          weather,
+          details
+        };
+      });
+
+      const resolvedWeather = await Promise.all(weatherPromises);
+      const validWeatherPoints = resolvedWeather.filter(w => w !== null);
+      setWeatherPoints(validWeatherPoints);
+
+      // Update map bounds to look at the new start location temporarily
       setMapCenter([startCoords.lat, startCoords.lon]);
       setMapZoom(12);
 
@@ -64,7 +103,12 @@ function App() {
         </div>
       )}
 
-      <MapDisplay center={mapCenter} zoom={mapZoom} />
+      <MapDisplay 
+        center={mapCenter} 
+        zoom={mapZoom} 
+        routeGeometry={routeGeometry} 
+        weatherPoints={weatherPoints} 
+      />
     </div>
   );
 }
