@@ -15,6 +15,7 @@ function App() {
   const [routeInfo, setRouteInfo] = useState({ start: null, dest: null, time: null });
   const [routeGeometry, setRouteGeometry] = useState(null);
   const [weatherPoints, setWeatherPoints] = useState([]);
+  const [routeStats, setRouteStats] = useState(null);
 
   const handleSearch = async ({ start, destination, departureTime }) => {
     setIsLoading(true);
@@ -45,6 +46,10 @@ function App() {
       }
 
       setRouteGeometry(routeData.geometry.coordinates);
+      setRouteStats({
+        distanceMiles: (routeData.distance / 1609.34).toFixed(1), // OSRM returns meters
+        durationMins: Math.round(routeData.duration / 60) // OSRM returns seconds
+      });
 
       // Phase 3: Calculate Intervals & weather
       console.log("Calculating intervals and fetching weather...");
@@ -86,6 +91,34 @@ function App() {
     <div className="app-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
       <SearchForm onSearch={handleSearch} isLoading={isLoading} />
       
+      {routeStats && !isLoading && (
+        <div className="glass-panel" style={{
+          position: 'absolute',
+          top: '350px', // Below the search form
+          left: '20px',
+          width: '350px',
+          padding: '16px',
+          zIndex: 1000,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 'bold' }}>Est. Distance</span>
+            <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>{routeStats.distanceMiles} mi</span>
+          </div>
+          <div style={{ width: '1px', backgroundColor: 'var(--panel-border)', height: '100%' }}></div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 'bold' }}>Est. Biking Time</span>
+            <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+              {routeStats.durationMins > 60 
+                ? `${Math.floor(routeStats.durationMins / 60)}h ${routeStats.durationMins % 60}m` 
+                : `${routeStats.durationMins}m`}
+            </span>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="glass-panel" style={{
           position: 'absolute',
