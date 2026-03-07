@@ -4,7 +4,7 @@
  * @param {{lat: number, lon: number}} start 
  * @param {{lat: number, lon: number}} end 
  * @param {string} profile The transport profile to use (driving, bicycle, foot)
- * @param {object} options Optional routing preferences (avoidTolls, avoidFerries, avoidHighways)
+ * @param {object} options Optional routing preferences (avoidTolls, avoidFerries, avoidHighways, avoidLocations)
  * @returns {Promise<{
  *   geometry: { coordinates: [number, number][] }, 
  *   distance: number,  // in meters
@@ -44,6 +44,10 @@ export async function getRoute(start, end, profile = 'bicycle', options = {}) {
       if (options.avoidTolls) payload.costing_options[costingModel].use_tolls = 0;
       if (options.avoidFerries) payload.costing_options[costingModel].use_ferry = 0;
       if (options.avoidHighways && costingModel === 'auto') payload.costing_options[costingModel].use_highways = 0;
+      
+      if (options.avoidLocations && options.avoidLocations.length > 0) {
+        payload.exclude_locations = options.avoidLocations.map(pt => ({ lat: pt.lat, lon: pt.lon }));
+      }
     }
 
     const response = await fetch(url, {

@@ -89,3 +89,17 @@ export function getWeatherDescription(code) {
   if (code >= 95 && code <= 99) return { desc: "Thunderstorm", icon: "⛈️" };
   return { desc: "Unknown", icon: "❓" };
 }
+
+/**
+ * Determines if a weather code indicates bad weather (rain, snow, showers, thunderstorms).
+ */
+export function isBadWeather(code) {
+  // 51-67: Rain
+  // 71-77: Snow
+  // 80-82: Showers
+  // 95-99: Thunderstorm
+  return (code >= 51 && code <= 67) || 
+         (code >= 71 && code <= 77) || 
+         (code >= 80 && code <= 82) || 
+         (code >= 95 && code <= 99);
+}

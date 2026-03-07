@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { MapContainer, TileLayer, useMap, Polyline, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { isBadWeather } from '../services/weather';
 
 // Default center (Continental US roughly)
 const DEFAULT_CENTER = [39.8283, -98.5795];
@@ -52,7 +53,7 @@ function createWeatherIcon(emoji, temp) {
   });
 }
 
-export default function MapDisplay({ center, zoom, routeGeometry, weatherPoints = [] }) {
+export default function MapDisplay({ center, zoom, routeGeometry, weatherPoints = [], onReroute }) {
   // OSRM returns [lon, lat], but Leaflet Polyline expects [lat, lon]
   const leafletPositions = routeGeometry 
     ? routeGeometry.map(([lon, lat]) => [lat, lon]) 
@@ -101,6 +102,24 @@ export default function MapDisplay({ center, zoom, routeGeometry, weatherPoints 
                 <div style={{ fontSize: '12px' }}>
                   <strong>Precip:</strong> {wp.weather.precipitationProb}% chance
                 </div>
+                {isBadWeather(wp.weather.weatherCode) && onReroute && (
+                  <button 
+                    onClick={() => onReroute(wp.lat, wp.lon)}
+                    style={{
+                      marginTop: '10px',
+                      padding: '6px 12px',
+                      backgroundColor: 'var(--accent-color)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      width: '100%'
+                    }}
+                  >
+                    Re-route to avoid this
+                  </button>
+                )}
               </div>
             </Popup>
           </Marker>
