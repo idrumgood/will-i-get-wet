@@ -16,7 +16,7 @@ This project is configured to deploy as a static site to Google Firebase Hosting
 
 1. Install the Firebase CLI globally if you haven't already:
    ```bash
-   npm install -g firebase-tools
+   yarn global add firebase-tools
    ```
 2. Login to your Google account:
    ```bash
