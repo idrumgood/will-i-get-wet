@@ -4,7 +4,7 @@
  * @param {{lat: number, lon: number}} start 
  * @param {{lat: number, lon: number}} end 
  * @param {string} profile The transport profile to use (driving, bicycle, foot)
- * @param {object} options Optional routing preferences (avoidTolls, avoidFerries, avoidHighways)
+ * @param {object} options Optional routing preferences (avoidTolls, avoidFerries, avoidHighways, avoidLocations)
  * @returns {Promise<{
  *   geometry: { coordinates: [number, number][] }, 
  *   distance: number,  // in meters
@@ -44,6 +44,10 @@ export async function getRoute(start, end, profile = 'bicycle', options = {}) {
       if (options.avoidTolls) payload.costing_options[costingModel].use_tolls = 0;
       if (options.avoidFerries) payload.costing_options[costingModel].use_ferry = 0;
       if (options.avoidHighways && costingModel === 'auto') payload.costing_options[costingModel].use_highways = 0;
+      
+      if (options.avoidLocations && options.avoidLocations.length > 0) {
+        payload.exclude_polygons = options.avoidLocations.map(pt => createAvoidancePolygon(pt.lat, pt.lon, 2));
+      }
     }
 
     const response = await fetch(url, {
@@ -96,4 +100,33 @@ function decodePolyline(str, precision = 6) {
     coordinates.push([lat / factor, lng / factor]);
   }
   return coordinates;
+}
+
+/**
+ * Creates a roughly square bounding box polygon around a center point.
+ * @param {number} lat Center latitude
+ * @param {number} lon Center longitude
+ * @param {number} radiusMiles Approximate "radius" (actually half width/height) of the box in miles
+ * @returns {[number, number][]} Array of [lon, lat] coordinates representing a closed ring
+ */
+function createAvoidancePolygon(lat, lon, radiusMiles) {
+  // 1 degree of latitude is approx 69 miles
+  const latOffset = radiusMiles / 69.0;
+  // 1 degree of longitude is approx 69 miles * cos(latitude)
+  const lonOffset = radiusMiles / (69.0 * Math.cos(lat * Math.PI / 180));
+
+  const northLat = lat + latOffset;
+  const southLat = lat - latOffset;
+  const eastLon = lon + lonOffset;
+  const westLon = lon - lonOffset;
+
+  // Valhalla polygons require a closed ring of [lon, lat] ordered counter-clockwise
+  // though generally order doesn't matter for simple exclude polygons as long as it's closed
+  return [
+    [westLon, northLat], // Top Left
+    [westLon, southLat], // Bottom Left
+    [eastLon, southLat], // Bottom Right
+    [eastLon, northLat], // Top Right
+    [westLon, northLat]  // Close the ring (Top Left)
+  ];
 }

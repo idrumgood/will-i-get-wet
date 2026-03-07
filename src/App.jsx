@@ -16,10 +16,53 @@ function App() {
   const [routeGeometry, setRouteGeometry] = useState(null);
   const [weatherPoints, setWeatherPoints] = useState([]);
   const [routeStats, setRouteStats] = useState(null);
+  const [avoidLocations, setAvoidLocations] = useState([]);
+  const [lastRouteParams, setLastRouteParams] = useState(null);
+
+  const fetchRouteAndWeather = async (startCoords, destCoords, departureTime, transportMode, options, currentAvoids) => {
+    // Phase 3: Fetch Route Data
+    console.log(`Fetching ${transportMode} route...`);
+    const routeData = await getRoute(startCoords, destCoords, transportMode, { ...options, avoidLocations: currentAvoids });
+    
+    if (!routeData) {
+      throw new Error(`Could not find a valid ${transportMode} route.`);
+    }
+
+    setRouteGeometry(routeData.geometry.coordinates);
+    setRouteStats({
+      distanceMiles: (routeData.distance / 1609.34).toFixed(1), // OSRM returns meters
+      durationMins: Math.round(routeData.duration / 60) // OSRM returns seconds
+    });
+
+    // Phase 3: Calculate Intervals & weather
+    console.log("Calculating intervals and fetching weather...");
+    // Parse the standard HTML datetime-local picker string into a Date object
+    const depDate = new Date(departureTime);
+    
+    const intervalPoints = calculateWeatherIntervals(routeData.geometry.coordinates, routeData.duration, depDate, 30); // Every 30 mins
+    
+    // Fetch weather concurrently for all points
+    const weatherPromises = intervalPoints.map(async (pt) => {
+      const weather = await getIntervalWeather(pt.lat, pt.lon, pt.arrivalTime);
+      if (!weather) return null;
+      
+      const details = getWeatherDescription(weather.weatherCode);
+      return {
+        ...pt,
+        weather,
+        details
+      };
+    });
+
+    const resolvedWeather = await Promise.all(weatherPromises);
+    const validWeatherPoints = resolvedWeather.filter(w => w !== null);
+    setWeatherPoints(validWeatherPoints);
+  };
 
   const handleSearch = async ({ start, destination, departureTime, transportMode, options }) => {
     setIsLoading(true);
     setError(null);
+    setAvoidLocations([]);
 
     try {
       // Phase 2: Geocoding the cities
@@ -38,44 +81,9 @@ function App() {
       console.log('Options:', options);
       
       setRouteInfo({ start: startCoords, dest: destCoords, time: departureTime, mode: transportMode });
+      setLastRouteParams({ startCoords, destCoords, departureTime, transportMode, options });
       
-      // Phase 3: Fetch Route Data
-      console.log(`Fetching ${transportMode} route...`);
-      const routeData = await getRoute(startCoords, destCoords, transportMode, options);
-      
-      if (!routeData) {
-        throw new Error(`Could not find a valid ${transportMode} route.`);
-      }
-
-      setRouteGeometry(routeData.geometry.coordinates);
-      setRouteStats({
-        distanceMiles: (routeData.distance / 1609.34).toFixed(1), // OSRM returns meters
-        durationMins: Math.round(routeData.duration / 60) // OSRM returns seconds
-      });
-
-      // Phase 3: Calculate Intervals & weather
-      console.log("Calculating intervals and fetching weather...");
-      // Parse the standard HTML datetime-local picker string into a Date object
-      const depDate = new Date(departureTime);
-      
-      const intervalPoints = calculateWeatherIntervals(routeData.geometry.coordinates, routeData.duration, depDate, 30); // Every 30 mins
-      
-      // Fetch weather concurrently for all points
-      const weatherPromises = intervalPoints.map(async (pt) => {
-        const weather = await getIntervalWeather(pt.lat, pt.lon, pt.arrivalTime);
-        if (!weather) return null;
-        
-        const details = getWeatherDescription(weather.weatherCode);
-        return {
-          ...pt,
-          weather,
-          details
-        };
-      });
-
-      const resolvedWeather = await Promise.all(weatherPromises);
-      const validWeatherPoints = resolvedWeather.filter(w => w !== null);
-      setWeatherPoints(validWeatherPoints);
+      await fetchRouteAndWeather(startCoords, destCoords, departureTime, transportMode, options, []);
 
       // Update map bounds to look at the new start location temporarily
       setMapCenter([startCoords.lat, startCoords.lon]);
@@ -84,6 +92,31 @@ function App() {
     } catch (err) {
       console.error(err);
       setError(err.message || 'An error occurred while fetching data.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleReroute = async (lat, lon) => {
+    if (!lastRouteParams) return;
+    setIsLoading(true);
+    setError(null);
+
+    const newAvoids = [...avoidLocations, { lat, lon }];
+    setAvoidLocations(newAvoids);
+
+    try {
+      await fetchRouteAndWeather(
+        lastRouteParams.startCoords,
+        lastRouteParams.destCoords,
+        lastRouteParams.departureTime,
+        lastRouteParams.transportMode,
+        lastRouteParams.options,
+        newAvoids
+      );
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'An error occurred while re-routing.');
     } finally {
       setIsLoading(false);
     }
@@ -152,6 +185,7 @@ function App() {
         zoom={mapZoom} 
         routeGeometry={routeGeometry} 
         weatherPoints={weatherPoints} 
+        onReroute={handleReroute}
       />
     </div>
   );
