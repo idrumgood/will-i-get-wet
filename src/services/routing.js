@@ -46,7 +46,7 @@ export async function getRoute(start, end, profile = 'bicycle', options = {}) {
       if (options.avoidHighways && costingModel === 'auto') payload.costing_options[costingModel].use_highways = 0;
       
       if (options.avoidLocations && options.avoidLocations.length > 0) {
-        payload.exclude_polygons = options.avoidLocations.map(pt => [createAvoidancePolygon(pt.lat, pt.lon, 2)]);
+        payload.exclude_polygons = options.avoidLocations.map(pt => createAvoidancePolygon(pt.lat, pt.lon, 2));
       }
     }
 
