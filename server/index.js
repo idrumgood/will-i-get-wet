@@ -4,7 +4,6 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Client } from '@googlemaps/google-maps-services-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,8 +70,6 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 const app = express();
 const port = process.env.PORT || 3001;
 
-// Initialize Google Maps client
-const client = new Client({});
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
 app.use(cors());
@@ -96,51 +93,70 @@ app.post('/api/route', async (req, res) => {
   try {
     console.log(`Routing from ${start} to ${destination} using mode ${transportMode}`);
 
-    // Map transport mode to Google Maps mode
-    let mode = 'BICYCLING';
-    if (transportMode === 'driving') mode = 'DRIVING';
-    if (transportMode === 'foot') mode = 'WALKING';
+    // Map transport mode to Google Maps Routes API mode
+    let mode = 'BICYCLE';
+    if (transportMode === 'driving') mode = 'DRIVE';
+    if (transportMode === 'foot') mode = 'WALK';
 
-    // Prepare avoidance options
-    const avoid = [];
-    if (options?.avoidTolls) avoid.push('tolls');
-    if (options?.avoidFerries) avoid.push('ferries');
-    if (options?.avoidHighways && transportMode === 'driving') avoid.push('highways');
+    // Prepare avoidance options for Routes API
+    const routeModifiers = {};
+    if (options?.avoidTolls) routeModifiers.avoidTolls = true;
+    if (options?.avoidFerries) routeModifiers.avoidFerries = true;
+    if (options?.avoidHighways && transportMode === 'driving') routeModifiers.avoidHighways = true;
 
-    // 1. Get Directions from Google Maps
-    const directionsResponse = await client.directions({
-      params: {
-        origin: start,
-        destination: destination,
-        mode: mode,
-        avoid: avoid.length > 0 ? avoid : undefined,
-        departure_time: departureTime ? new Date(departureTime) : new Date(),
-        key: GOOGLE_MAPS_API_KEY
-      }
+    // 1. Get Directions using the new Routes API
+    // Need to format origin and destination for Routes API
+    // Since we just have address strings, we use the `address` modifier
+    const requestBody = {
+      origin: { address: start },
+      destination: { address: destination },
+      travelMode: mode,
+      routingPreference: mode === 'DRIVE' ? 'TRAFFIC_AWARE' : undefined,
+      routeModifiers: Object.keys(routeModifiers).length > 0 ? routeModifiers : undefined,
+      departureTime: departureTime ? new Date(departureTime).toISOString() : new Date().toISOString()
+    };
+
+    const routesResponse = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+        // Field mask to specify which data we want back to save bandwidth and compute
+        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.legs.startLocation,routes.legs.endLocation,routes.viewport'
+      },
+      body: JSON.stringify(requestBody)
     });
 
-    const route = directionsResponse.data.routes[0];
-    if (!route || !route.legs || route.legs.length === 0) {
+    const directionsData = await routesResponse.json();
+
+    if (!routesResponse.ok) {
+      console.error('Routes API Error:', directionsData);
+      throw new Error(directionsData.error?.message || 'Routes API Error');
+    }
+
+    const route = directionsData.routes?.[0];
+    if (!route) {
       return res.status(404).json({ error: 'No route found' });
     }
 
-    const leg = route.legs[0];
+    const leg = route.legs?.[0];
 
-    const startCoords = { lat: leg.start_location.lat, lon: leg.start_location.lng };
-    const destCoords = { lat: leg.end_location.lat, lon: leg.end_location.lng };
+    const startCoords = leg?.startLocation?.latLng ? { lat: leg.startLocation.latLng.latitude, lon: leg.startLocation.latLng.longitude } : null;
+    const destCoords = leg?.endLocation?.latLng ? { lat: leg.endLocation.latLng.latitude, lon: leg.endLocation.latLng.longitude } : null;
 
-    const distanceMeters = leg.distance.value;
-    const durationSeconds = leg.duration.value;
-    const encodedPolyline = route.overview_polyline.points;
-    const bounds = route.bounds;
+    const distanceMeters = route.distanceMeters;
+    // duration is a string like "123s", parse it to int
+    const durationSeconds = parseInt(route.duration?.replace('s', '') || 0, 10);
+    const encodedPolyline = route.polyline?.encodedPolyline;
+    const viewport = route.viewport; // low and high instead of northeast/southwest
 
     const stats = {
       distanceMiles: (distanceMeters / 1609.34).toFixed(1),
       durationMins: Math.round(durationSeconds / 60),
-      bounds: [
-        [bounds.northeast.lat, bounds.northeast.lng],
-        [bounds.southwest.lat, bounds.southwest.lng]
-      ]
+      bounds: viewport ? [
+        [viewport.high.latitude, viewport.high.longitude],
+        [viewport.low.latitude, viewport.low.longitude]
+      ] : null
     };
 
     // 2. Decode polyline to calculate intervals
