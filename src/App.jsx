@@ -1,122 +1,54 @@
 import { useState } from 'react';
 import SearchForm from './components/SearchForm';
 import MapDisplay from './components/MapDisplay';
-import { geocodeCity } from './services/geocoding';
-import { getRoute } from './services/routing';
-import { calculateWeatherIntervals } from './services/intervals';
-import { getIntervalWeather, getWeatherDescription } from './services/weather';
 import './App.css';
 
 function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [mapCenter, setMapCenter] = useState(null);
-  const [mapZoom, setMapZoom] = useState(null);
   const [routeInfo, setRouteInfo] = useState({ start: null, dest: null, time: null, mode: 'bicycle' });
   const [routeGeometry, setRouteGeometry] = useState(null);
   const [weatherPoints, setWeatherPoints] = useState([]);
   const [routeStats, setRouteStats] = useState(null);
-  const [avoidLocations, setAvoidLocations] = useState([]);
-  const [lastRouteParams, setLastRouteParams] = useState(null);
-
-  const fetchRouteAndWeather = async (startCoords, destCoords, departureTime, transportMode, options, currentAvoids) => {
-    // Phase 3: Fetch Route Data
-    console.log(`Fetching ${transportMode} route...`);
-    const routeData = await getRoute(startCoords, destCoords, transportMode, { ...options, avoidLocations: currentAvoids });
-    
-    if (!routeData) {
-      throw new Error(`Could not find a valid ${transportMode} route.`);
-    }
-
-    setRouteGeometry(routeData.geometry.coordinates);
-    setRouteStats({
-      distanceMiles: (routeData.distance / 1609.34).toFixed(1), // OSRM returns meters
-      durationMins: Math.round(routeData.duration / 60) // OSRM returns seconds
-    });
-
-    // Phase 3: Calculate Intervals & weather
-    console.log("Calculating intervals and fetching weather...");
-    // Parse the standard HTML datetime-local picker string into a Date object
-    const depDate = new Date(departureTime);
-    
-    const intervalPoints = calculateWeatherIntervals(routeData.geometry.coordinates, routeData.duration, depDate, 30); // Every 30 mins
-    
-    // Fetch weather concurrently for all points
-    const weatherPromises = intervalPoints.map(async (pt) => {
-      const weather = await getIntervalWeather(pt.lat, pt.lon, pt.arrivalTime);
-      if (!weather) return null;
-      
-      const details = getWeatherDescription(weather.weatherCode);
-      return {
-        ...pt,
-        weather,
-        details
-      };
-    });
-
-    const resolvedWeather = await Promise.all(weatherPromises);
-    const validWeatherPoints = resolvedWeather.filter(w => w !== null);
-    setWeatherPoints(validWeatherPoints);
-  };
 
   const handleSearch = async ({ start, destination, departureTime, transportMode, options }) => {
     setIsLoading(true);
     setError(null);
-    setAvoidLocations([]);
+    setWeatherPoints([]);
+    setRouteStats(null);
+    setRouteGeometry(null);
 
     try {
-      // Phase 2: Geocoding the cities
-      console.log(`Geocoding ${start} and ${destination}...`);
-      const startCoords = await geocodeCity(start);
-      const destCoords = await geocodeCity(destination);
+      const response = await fetch('/api/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start,
+          destination,
+          departureTime,
+          transportMode,
+          options
+        })
+      });
 
-      if (!startCoords || !destCoords) {
-        throw new Error("Could not find coordinates for one or both locations.");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch route');
       }
 
-      console.log('Start Coordinates:', startCoords);
-      console.log('Dest Coordinates:', destCoords);
-      console.log('Departure Time:', departureTime);
-      console.log('Transport Mode:', transportMode);
-      console.log('Options:', options);
+      setRouteInfo({ start: data.startCoords, dest: data.destCoords, time: departureTime, mode: transportMode });
+      setRouteGeometry(data.encodedPolyline);
+      setRouteStats(data.stats);
+      setWeatherPoints(data.weatherPoints);
       
-      setRouteInfo({ start: startCoords, dest: destCoords, time: departureTime, mode: transportMode });
-      setLastRouteParams({ startCoords, destCoords, departureTime, transportMode, options });
+      // We will let the MapDisplay fit bounds using the bounds from the backend
+      setMapCenter(null);
       
-      await fetchRouteAndWeather(startCoords, destCoords, departureTime, transportMode, options, []);
-
-      // Update map bounds to look at the new start location temporarily
-      setMapCenter([startCoords.lat, startCoords.lon]);
-      setMapZoom(12);
-
     } catch (err) {
       console.error(err);
       setError(err.message || 'An error occurred while fetching data.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleReroute = async (lat, lon) => {
-    if (!lastRouteParams) return;
-    setIsLoading(true);
-    setError(null);
-
-    const newAvoids = [...avoidLocations, { lat, lon }];
-    setAvoidLocations(newAvoids);
-
-    try {
-      await fetchRouteAndWeather(
-        lastRouteParams.startCoords,
-        lastRouteParams.destCoords,
-        lastRouteParams.departureTime,
-        lastRouteParams.transportMode,
-        lastRouteParams.options,
-        newAvoids
-      );
-    } catch (err) {
-      console.error(err);
-      setError(err.message || 'An error occurred while re-routing.');
     } finally {
       setIsLoading(false);
     }
@@ -182,10 +114,9 @@ function App() {
 
       <MapDisplay 
         center={mapCenter} 
-        zoom={mapZoom} 
-        routeGeometry={routeGeometry} 
+        encodedPolyline={routeGeometry}
+        bounds={routeStats?.bounds}
         weatherPoints={weatherPoints} 
-        onReroute={handleReroute}
       />
     </div>
   );
