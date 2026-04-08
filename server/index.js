@@ -75,6 +75,9 @@ const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 app.use(cors());
 app.use(express.json());
 
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../dist')));
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
@@ -252,6 +255,17 @@ function decodePath(encodedPath) {
   }
   return path;
 }
+
+// Catch-all to serve the React app for non-API routes
+// Use middleware to catch requests instead of app.get('*') because Express 5
+// (via path-to-regexp v8) dropped support for wildcard routes without named parameters.
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api/')) {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  } else {
+    next();
+  }
+});
 
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
