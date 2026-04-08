@@ -2,7 +2,12 @@ import process from 'node:process';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { Client } from '@googlemaps/google-maps-services-js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Weather fetching helper
 async function getIntervalWeather(lat, lon, date) {
@@ -61,7 +66,7 @@ function getWeatherDescription(code) {
   return { desc: "Unknown", icon: "❓" };
 }
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const app = express();
 const port = process.env.PORT || 3001;
