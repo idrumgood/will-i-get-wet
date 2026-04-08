@@ -1,130 +1,168 @@
-import { useEffect } from 'react';
-import { MapContainer, TileLayer, useMap, Polyline, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { isBadWeather } from '../services/weather';
+import { useEffect, useState } from 'react';
+import { APIProvider, Map, useMap, AdvancedMarker, InfoWindow } from '@vis.gl/react-google-maps';
 
-// Default center (Continental US roughly)
-const DEFAULT_CENTER = [39.8283, -98.5795];
+const DEFAULT_CENTER = { lat: 39.8283, lng: -98.5795 };
 const DEFAULT_ZOOM = 4;
 
-// Component to handle map view updates natively via Leaflet hooks
-function MapController({ center, zoom }) {
+function MapController({ center, bounds }) {
   const map = useMap();
   
   useEffect(() => {
-    if (center && map) {
-      if (zoom) {
-        map.flyTo(center, zoom, { duration: 1.5 });
-      } else {
-        map.flyTo(center, map.getZoom(), { duration: 1.5 });
-      }
+    if (map && bounds) {
+      const googleBounds = new window.google.maps.LatLngBounds();
+      bounds.forEach(coord => {
+        googleBounds.extend({ lat: coord[0], lng: coord[1] });
+      });
+      map.fitBounds(googleBounds, { padding: 50 });
+    } else if (map && center) {
+      map.panTo({ lat: center[0], lng: center[1] });
     }
-  }, [center, zoom, map]);
+  }, [center, bounds, map]);
 
   return null;
 }
 
-// Custom icon creator function for our weather emojis
-function createWeatherIcon(emoji, temp) {
-  return L.divIcon({
-    html: `
-      <div style="
-        background-color: white; 
-        border: 2px solid var(--accent-color);
-        border-radius: 50%;
-        width: 36px; 
-        height: 36px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        font-size: 16px;
-        line-height: 1;
-      ">
-        <span style="font-size: 16px;">${emoji}</span>
-      </div>
-    `,
-    className: 'custom-weather-marker',
-    iconSize: [36, 36],
-    iconAnchor: [18, 18], // Center it over the line
-    popupAnchor: [0, -18] // Popup opens above
-  });
+// Component to render the polyline
+function DirectionsRenderer({ encodedPolyline }) {
+  const map = useMap();
+  const [polyline, setPolyline] = useState(null);
+
+  useEffect(() => {
+    if (!map || !window.google) return;
+
+    let isActive = true;
+    const newPolyline = new window.google.maps.Polyline({
+      strokeColor: '#3b82f6', // Match our accent-color roughly
+      strokeOpacity: 0.8,
+      strokeWeight: 5,
+    });
+
+    // Defer the state update to avoid calling it directly during render/mount phase hook evaluation if possible
+    Promise.resolve().then(() => {
+      if (isActive) setPolyline(newPolyline);
+    });
+
+    return () => {
+      isActive = false;
+      newPolyline.setMap(null);
+    };
+  }, [map]);
+
+  useEffect(() => {
+    if (!polyline || !window.google) return;
+
+    if (encodedPolyline) {
+      const path = window.google.maps.geometry.encoding.decodePath(encodedPolyline);
+      polyline.setPath(path);
+      polyline.setMap(map);
+    } else {
+      polyline.setMap(null);
+      polyline.setPath([]);
+    }
+  }, [map, polyline, encodedPolyline]);
+
+  // Clean up
+  useEffect(() => {
+    return () => {
+      if (polyline) {
+        polyline.setMap(null);
+      }
+    };
+  }, [polyline]);
+
+  return null;
 }
 
-export default function MapDisplay({ center, zoom, routeGeometry, weatherPoints = [], onReroute }) {
-  // OSRM returns [lon, lat], but Leaflet Polyline expects [lat, lon]
-  const leafletPositions = routeGeometry 
-    ? routeGeometry.map(([lon, lat]) => [lat, lon]) 
-    : [];
+function WeatherMarker({ wp }) {
+  const [infoOpen, setInfoOpen] = useState(false);
+  const position = { lat: wp.lat, lng: wp.lon };
+
+  // Format the arrival time correctly, since JSON parsing might turn it into a string
+  const arrivalTime = new Date(wp.arrivalTime);
+
+  return (
+    <>
+      <AdvancedMarker
+        position={position}
+        onClick={() => setInfoOpen(true)}
+      >
+        <div style={{
+          backgroundColor: 'white',
+          border: '2px solid var(--accent-color)',
+          borderRadius: '50%',
+          width: '36px',
+          height: '36px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.2)',
+          fontSize: '16px',
+          lineHeight: 1,
+          cursor: 'pointer'
+        }}>
+          <span style={{ fontSize: '16px' }}>{wp.details.icon}</span>
+        </div>
+      </AdvancedMarker>
+
+      {infoOpen && (
+        <InfoWindow
+          position={position}
+          onCloseClick={() => setInfoOpen(false)}
+          pixelOffset={[0, -18]}
+        >
+          <div style={{ textAlign: 'center', minWidth: '120px' }}>
+            <div style={{ fontSize: '24px', marginBottom: '4px' }}>{wp.details.icon}</div>
+            <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{Math.round(wp.weather.tempF)}°F</div>
+            <div style={{ fontSize: '14px', color: '#666' }}>{wp.details.desc}</div>
+            <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px solid #ccc' }} />
+            <div style={{ fontSize: '12px', color: '#333' }}>
+              <strong>Arrival:</strong> {arrivalTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+            </div>
+            <div style={{ fontSize: '12px', color: '#333' }}>
+              <strong>Precip:</strong> {wp.weather.precipitationProb}% chance
+            </div>
+          </div>
+        </InfoWindow>
+      )}
+    </>
+  );
+}
+
+export default function MapDisplay({ center, encodedPolyline, bounds, weatherPoints = [] }) {
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
+  if (!apiKey) {
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6' }}>
+        <div style={{ padding: '20px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+          <h2 style={{ margin: '0 0 10px 0', color: '#ef4444' }}>Missing Google Maps API Key</h2>
+          <p>Please add <code>VITE_GOOGLE_MAPS_API_KEY</code> to your environment variables or <code>.env</code> file.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: '100%', height: '100%', zIndex: 1 }}>
-      <MapContainer 
-        center={DEFAULT_CENTER} 
-        zoom={DEFAULT_ZOOM} 
-        style={{ width: '100%', height: '100%' }}
-        zoomControl={false}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <MapController center={center} zoom={zoom} />
-        {/* Render the Route Line if exists */}
-        {leafletPositions.length > 0 && (
-          <Polyline 
-            positions={leafletPositions} 
-            color="var(--accent-color)" 
-            weight={5} 
-            opacity={0.8}
-          />
-        )}
-        
-        {/* Render Weather Markers */}
-        {weatherPoints.map((wp, idx) => (
-          <Marker 
-            key={idx} 
-            position={[wp.lat, wp.lon]} 
-            icon={createWeatherIcon(wp.details.icon, Math.round(wp.weather.tempF))}
-            zIndexOffset={100}
-          >
-            <Popup>
-              <div style={{ textAlign: 'center', minWidth: '120px' }}>
-                <div style={{ fontSize: '24px', marginBottom: '4px' }}>{wp.details.icon}</div>
-                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{Math.round(wp.weather.tempF)}°F</div>
-                <div style={{ fontSize: '14px', color: '#666' }}>{wp.details.desc}</div>
-                <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px solid #ccc' }} />
-                <div style={{ fontSize: '12px' }}>
-                  <strong>Arrival:</strong> {wp.arrivalTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                </div>
-                <div style={{ fontSize: '12px' }}>
-                  <strong>Precip:</strong> {wp.weather.precipitationProb}% chance
-                </div>
-                {isBadWeather(wp.weather.weatherCode) && onReroute && (
-                  <button 
-                    onClick={() => onReroute(wp.lat, wp.lon)}
-                    style={{
-                      marginTop: '10px',
-                      padding: '6px 12px',
-                      backgroundColor: 'var(--accent-color)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      width: '100%'
-                    }}
-                  >
-                    Re-route to avoid this
-                  </button>
-                )}
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-      </MapContainer>
+      <APIProvider apiKey={apiKey} libraries={['geometry']}>
+        <Map
+          defaultCenter={DEFAULT_CENTER}
+          defaultZoom={DEFAULT_ZOOM}
+          mapId="DEMO_MAP_ID"
+          disableDefaultUI={true}
+          zoomControl={true}
+          style={{ width: '100%', height: '100%' }}
+        >
+          <MapController center={center} bounds={bounds} />
+
+          <DirectionsRenderer encodedPolyline={encodedPolyline} />
+
+          {weatherPoints.map((wp, idx) => (
+            <WeatherMarker key={idx} wp={wp} />
+          ))}
+        </Map>
+      </APIProvider>
     </div>
   );
 }
