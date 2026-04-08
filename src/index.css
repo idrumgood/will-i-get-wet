@@ -44,8 +44,3 @@ body {
   box-shadow: var(--glass-shadow);
 }
 
-.leaflet-container {
-  width: 100%;
-  height: 100%;
-  z-index: 1; /* Keep map below floating panels */
-}
