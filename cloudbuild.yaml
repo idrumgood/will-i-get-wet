@@ -1,4 +1,12 @@
 steps:
+  # Generate a .env file so Vite can pick up the API key during the docker build
+  - name: 'ubuntu'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "VITE_GOOGLE_MAPS_API_KEY=$_VITE_GOOGLE_MAPS_API_KEY" > .env
+
   # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
     args:
