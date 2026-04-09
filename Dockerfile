@@ -9,6 +9,10 @@ RUN yarn install --frozen-lockfile
 # Copy the rest of the application code
 COPY . .
 
+# Allow passing VITE_ variables at build time
+ARG VITE_GOOGLE_MAPS_API_KEY
+ENV VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY
+
 # Build the Vite frontend (outputs to /app/dist)
 RUN yarn build
 
